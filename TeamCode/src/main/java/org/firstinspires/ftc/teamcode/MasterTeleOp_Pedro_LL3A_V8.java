@@ -25,7 +25,7 @@ import java.util.List;
 import java.util.TreeMap;
 import java.util.Map;
 
-@TeleOp(name = "MasterTeleOp_Pedro_V8_NoDriveEnc", group = "TeleOp")
+@TeleOp(name = "MasterTeleOp_Pedro_V8_DEBUG", group = "TeleOp")
 public class MasterTeleOp_Pedro_LL3A_V8 extends OpMode {
 
     // =========================================================
@@ -80,6 +80,9 @@ public class MasterTeleOp_Pedro_LL3A_V8 extends OpMode {
     // =========================================================
 
     private DcMotorEx launcherMotor; //control hub port 2
+    // Debug Motors for Telemetry
+    private DcMotorEx fl, fr, bl, br;
+
     private CRServo feeder;  //TODO : Add second servo port 1 one control hub
     private Servo liftL, liftR; // ports 3 and 4
     private VoltageSensor batteryVoltageSensor;
@@ -90,6 +93,7 @@ public class MasterTeleOp_Pedro_LL3A_V8 extends OpMode {
     private double currentFlywheelRPM = 0.0;
     private int autoShotsCount = 0;
     private ElapsedTime autoFireTimer = new ElapsedTime();
+    private ElapsedTime loopTimer = new ElapsedTime(); // For Hz calculation
     private enum FireState { IDLE, FEEDING, WAITING }
     private FireState currentFireState = FireState.IDLE;
 
@@ -104,7 +108,7 @@ public class MasterTeleOp_Pedro_LL3A_V8 extends OpMode {
     private final int OBELISK_PGP = 22;
     private final int OBELISK_PPG = 23;
 
-    private boolean fieldCentric = true;
+    private boolean fieldCentric = false;
     private boolean rightBumperPressed = false;
 
     // =========================================================
@@ -115,7 +119,7 @@ public class MasterTeleOp_Pedro_LL3A_V8 extends OpMode {
     public void init() {
         // 1. Pedro Follower (Handles Drive & Pinpoint)
         follower = Constants.createFollower(hardwareMap);
-        follower.setStartingPose(new Pose(0,0,0)); // add starting pose 
+        follower.setStartingPose(new Pose(0,0,0)); // add starting pose
 
         // --- CRITICAL: FORCE DRIVE MOTORS TO NO ENCODER MODE ---
         forceDriveMotorsToNoEncoder();
@@ -142,16 +146,16 @@ public class MasterTeleOp_Pedro_LL3A_V8 extends OpMode {
         limelight.setPollRateHz(100);
         limelight.start();
 
-        telemetry.addLine("Initialized: V8 (Drive Encoders DISABLED)");
+        telemetry.addLine("Initialized: V8 DEBUG (Drive Encoders DISABLED)");
         telemetry.update();
     }
 
     // Helper to ensure drive motors don't use broken encoders
     private void forceDriveMotorsToNoEncoder() {
-        DcMotorEx fl = hardwareMap.get(DcMotorEx.class, "frontLeft");
-        DcMotorEx bl = hardwareMap.get(DcMotorEx.class, "backLeft");
-        DcMotorEx fr = hardwareMap.get(DcMotorEx.class, "frontRight");
-        DcMotorEx br = hardwareMap.get(DcMotorEx.class, "backRight");
+        fl = hardwareMap.get(DcMotorEx.class, "frontLeft");
+        bl = hardwareMap.get(DcMotorEx.class, "backLeft");
+        fr = hardwareMap.get(DcMotorEx.class, "frontRight");
+        br = hardwareMap.get(DcMotorEx.class, "backRight");
 
         fl.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
         bl.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
@@ -162,6 +166,7 @@ public class MasterTeleOp_Pedro_LL3A_V8 extends OpMode {
     @Override
     public void start() {
         follower.startTeleopDrive();
+        loopTimer.reset();
     }
 
     // =========================================================
@@ -318,10 +323,30 @@ public class MasterTeleOp_Pedro_LL3A_V8 extends OpMode {
     }
 
     private void updateTelemetry() {
+        // Performance
+        double loopMs = loopTimer.milliseconds();
+        loopTimer.reset();
+        telemetry.addData("Hz", "%.1f", 1000.0 / loopMs);
+
+        // Drive State
         telemetry.addData("Drive Mode", fieldCentric ? "FIELD-CENTRIC" : "ROBOT-CENTRIC");
-        telemetry.addData("Target RPM", currentTargetRPM);
-        telemetry.addData("Actual RPM", "%.0f", currentFlywheelRPM);
-        telemetry.addData("Loc", follower.getPose().toString());
+        telemetry.addData("Position", "X:%.1f Y:%.1f H:%.1f",
+                follower.getPose().getX(), follower.getPose().getY(), Math.toDegrees(follower.getPose().getHeading()));
+
+        // Motors (To debug direction issues)
+        telemetry.addData("Motors", "FL:%.2f FR:%.2f BL:%.2f BR:%.2f",
+                fl.getPower(), fr.getPower(), bl.getPower(), br.getPower());
+
+        // Flywheel
+        telemetry.addData("RPM", "Target:%d | Actual:%.0f", currentTargetRPM, currentFlywheelRPM);
+
+        // Vision (To debug AprilTag distance/detection)
+        if(tagVisible) {
+            telemetry.addData("Limelight", "ID:%d Tx:%.1f Ty:%.1f Dist:%.1f\"", tagID, targetTx, targetTy, calculatedDistance);
+        } else {
+            telemetry.addData("Limelight", "NO TARGET");
+        }
+
         telemetry.update();
     }
 }

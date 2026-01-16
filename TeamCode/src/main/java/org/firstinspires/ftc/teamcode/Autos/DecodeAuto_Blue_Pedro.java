@@ -151,7 +151,7 @@ public class DecodeAuto_Blue_Pedro extends OpMode {
     private void buildPaths() {
         pathStartToShoot = follower.pathBuilder()
                 .addPath(new BezierLine(startPose, shootPose1))
-                .setLinearHeadingInterpolation(startPose.getHeading(), shootPose1.getHeading())
+                .setLinearHeadingInterpolation(startPose.getHeading(), shootPose1.getHeading(), 0.8) // 0.8 = finish turn at 80% of path
                 .build();
 
         pathShootToIntake = follower.pathBuilder()

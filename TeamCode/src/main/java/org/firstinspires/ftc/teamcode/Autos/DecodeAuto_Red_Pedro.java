@@ -15,7 +15,7 @@ import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.PIDFCoefficients;
 import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
 
-@Autonomous(name = "DECODE Auto: Red (Standard)", group = "Autonomous")
+@Autonomous(name = "DECODE Auto: Red (Standard) [FIXED]", group = "Autonomous")
 public class DecodeAuto_Red_Pedro extends OpMode {
 
     private Follower follower;
@@ -54,18 +54,23 @@ public class DecodeAuto_Red_Pedro extends OpMode {
     @Override public void init() {
         follower = Constants.createFollower(hardwareMap);
         follower.setStartingPose(startPose);
+
         launcherMotor = hardwareMap.get(DcMotorEx.class, "launcherMotor");
         launcherMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         launcherMotor.setPIDFCoefficients(DcMotor.RunMode.RUN_USING_ENCODER, new PIDFCoefficients(50, 0, 0, 12));
         launcherMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
+
         intakeMotor = hardwareMap.get(DcMotor.class, "intakeMotor");
         intakeMotor.setDirection(DcMotorSimple.Direction.REVERSE);
         intakeMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
+
         feeder = hardwareMap.get(CRServo.class, "feeder");
         feeder.setDirection(DcMotorSimple.Direction.REVERSE);
+
         opModeTimer = new Timer(); fireTimer = new Timer();
         buildPaths();
     }
+
     @Override public void start() { opModeTimer.resetTimer(); setPathState(START); }
     @Override public void loop() { follower.update(); handleFiringLogic(); autonomousLogic(); telemetry.addData("State", pathState); telemetry.update(); }
 
@@ -117,7 +122,9 @@ public class DecodeAuto_Red_Pedro extends OpMode {
                 break;
         }
     }
+
     private void startFiringSequence(int shots) { shotsToFire = shots; currentFireState = FireState.PUSH; fireTimer.resetTimer(); isFiring = true; }
+
     private void handleFiringLogic() {
         if (!isFiring) return;
         switch (currentFireState) {
@@ -125,17 +132,34 @@ public class DecodeAuto_Red_Pedro extends OpMode {
             case WAIT: feeder.setPower(0); if (fireTimer.getElapsedTime() / 1e9 > SHOT_DELAY) { shotsToFire--; if (shotsToFire > 0) currentFireState = FireState.PUSH; else { isFiring = false; currentFireState = FireState.IDLE; } fireTimer.resetTimer(); } break;
         }
     }
-    private void setPathState(int pState) { pathState = pState; opModeTimer.resetTimer(); }
-    private void buildPaths() {
-        pathStartToShoot = follower.pathBuilder().addPath(new BezierLine(startPose, shootPose1)).setLinearHeadingInterpolation(startPose.getHeading(), shootPose1.getHeading()).build();
-        pathShootToIntake = follower.pathBuilder().addPath(new BezierCurve(shootPose1, intakeControlPoint, intakeInterPose)).setTangentHeadingInterpolation().addPath(new BezierLine(intakeInterPose, intakeDonePose)).setTangentHeadingInterpolation().build();
 
-        pathIntakeToShoot = follower.pathBuilder()
-                .addPath(new BezierCurve(intakeDonePose, returnControlPoint, shootPose2))
-                .setTangentHeadingInterpolation()
-                .setReversed() // FIX: Removed "true"
+    private void setPathState(int pState) { pathState = pState; opModeTimer.resetTimer(); }
+
+    private void buildPaths() {
+        // FIX: Added '0.5' endTime for Linear Heading Interpolation
+        pathStartToShoot = follower.pathBuilder()
+                .addPath(new BezierLine(startPose, shootPose1))
+                .setLinearHeadingInterpolation(startPose.getHeading(), shootPose1.getHeading(), 0.5)
                 .build();
 
-        pathShootToPark = follower.pathBuilder().addPath(new BezierLine(shootPose2, parkPose)).setTangentHeadingInterpolation().build();
+        pathShootToIntake = follower.pathBuilder()
+                .addPath(new BezierCurve(shootPose1, intakeControlPoint, intakeInterPose))
+                .setTangentHeadingInterpolation()
+                .addPath(new BezierLine(intakeInterPose, intakeDonePose))
+                .setTangentHeadingInterpolation()
+                .build();
+
+        // FIX: Replaced setReversed() with Constant Heading Interpolation
+        // Since you are driving back to the shoot pose but want to keep the shoot heading (~70 deg),
+        // ConstantHeadingInterpolation is the most reliable way to do this in v2.
+        pathIntakeToShoot = follower.pathBuilder()
+                .addPath(new BezierCurve(intakeDonePose, returnControlPoint, shootPose2))
+                .setConstantHeadingInterpolation(shootPose2.getHeading())
+                .build();
+
+        pathShootToPark = follower.pathBuilder()
+                .addPath(new BezierLine(shootPose2, parkPose))
+                .setTangentHeadingInterpolation()
+                .build();
     }
 }
